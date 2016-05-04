@@ -1,0 +1,25 @@
+[MESSAGES CONTROL]
+# Format
+msg-template='{msg_id}:{line:3d},{column}: {obj}: {msg} ({symbol})'
+# Disable the following PyLint messages:
+# C0413: wrong-import-position
+disable=C0413
+
+
+[REPORTS]
+
+# set the output format. Available formats are text, parseable, colorized and
+# html
+output-format=colorized
+
+# Tells wether to display a full report or only the messages
+#reports=no
+
+[MISCELLANEOUS]
+
+# List of note tags to take in consideration, separated by a comma.
+# FIXME -- something which needs fixing
+# TODO  -- future plan
+# XXX   -- some concern
+# YYY   -- comment/answer to above mentioned concern
+notes=FIXME,TODO,XXX,YYY
