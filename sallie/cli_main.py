@@ -9,13 +9,18 @@ __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2016, Florian JUNG"
 __license__ = "MIT"
 __version__ = "0.1.0"
-__date__ = "2016-04-29"
-# Created: 2016-04-29 19:29
+__date__ = "2016-05-12"
+# Created: 2016-05-12 18:04
 
+import argparse
 import datetime
+import logging.config
 
 import pytz
 from flotils import ModuleLogable
+from flotils.logable import default_logging_config
+
+from . import TVNextTVDB
 
 
 class Logger(ModuleLogable):
@@ -121,7 +126,7 @@ def shows_check(s, autosave, forcecheck, min_delta, max_delta):
     Check for new shows
 
     :param s: Sallie instance
-    :type s: SallieTVNextTVDB
+    :type s: sallie.TVNext
     :param autosave: Save after every request
     :type autosave: bool
     :param forcecheck: Force reload
@@ -136,10 +141,10 @@ def shows_check(s, autosave, forcecheck, min_delta, max_delta):
         min_delta = datetime.timedelta(days=min_delta)
     if max_delta is not None:
         max_delta = datetime.timedelta(days=max_delta)
-    res = s.check(
+    res = s.check_all(
         delta_max=max_delta,
         delta_min=min_delta,
-        autosave=autosave,
+        auto_save=autosave,
         force_check=forcecheck
     )
 
@@ -154,7 +159,7 @@ def shows_list(
     """
 
     :param s: Sallie instance
-    :type s: SallieTVNextTVDB
+    :type s: sallie.TVNext
     :param select:
     :type select:
     :param sort_by: Sorts separated by ; (values: date, state)
@@ -265,7 +270,7 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
     Show next aired episode of show(s)
 
     :param s: Sallie instance
-    :type s: SallieTVNextTVDB
+    :type s: sallie.TVNext
     :param sort_by: Sorts separated by ; (values: date, state)
     :type sort_by: str
     :param reverse: Reverse order (default: False)
@@ -328,16 +333,13 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
         logger.info(txt)
 
 
-if __name__ == "__main__":
-    import argparse
-    import logging
-    import logging.config
-    from flotils.logable import default_logging_config
-    from sallie import TVNextTVDB
+def setup_parser():
+    """
+    Create and init argument parser
 
-    logging.config.dictConfig(default_logging_config)
-    logging.getLogger().setLevel(logging.INFO)
-
+    :return: Argument parser
+    :rtype: argparse.ArgumentParser
+    """
     parser = argparse.ArgumentParser(prog="sallie")
     parser.add_argument(
         "--debug", action="store_true",
@@ -409,6 +411,15 @@ if __name__ == "__main__":
         "--all", nargs="?", const=True, default=False,
         help="Do to all"
     )
+
+    return parser
+
+
+def main():
+    logging.config.dictConfig(default_logging_config)
+    logging.getLogger().setLevel(logging.INFO)
+
+    parser = setup_parser()
     args = parser.parse_args()
 
     if args.debug:
@@ -418,16 +429,17 @@ if __name__ == "__main__":
         'path_prefix': args.pre_path
     })
 
+    tv.start(blocking=False)
     check = args.check
     if args.update:
         check = False
         if args.update == "all":
-            tv.show_update_all(forcecheck=args.force, autosave=args.autosave)
+            tv.show_update_all(force_check=args.force, auto_save=args.autosave)
             check = True
         elif args.update not in tv.shows:
             logger.error(u"Show {} not found".format(args.update))
         else:
-            tv.show_update(args.update, autosave=args.autosave)
+            tv.show_update(args.update, auto_save=args.autosave)
     if args.list:
         shows_list(
             tv, args.list, args.sort, args.reverse, args.all,

@@ -9,15 +9,15 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2014-16, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.5.3a0"
-__date__ = "2016-05-04"
+__version__ = "0.6.2"
+__date__ = "2016-05-13"
 # Created: 2014-05-18 04:08
 
 import datetime
 from datetime import timedelta
 import time
 import os
-import logging
+import threading
 from collections import OrderedDict
 from abc import ABCMeta, abstractmethod
 
@@ -27,6 +27,7 @@ from future.utils import with_metaclass
 
 from flotils.loadable import Loadable, DateTimeEncoder, DateTimeDecoder
 from flotils.logable import ModuleLogable
+from flotils import StartStopable
 
 
 class Logger(ModuleLogable):
@@ -35,6 +36,16 @@ class Logger(ModuleLogable):
 
 
 logger = Logger() # pylint: disable=invalid-name
+
+
+class TVNextException(Exception):
+    """ Base exception for project """
+    pass
+
+
+class TVNextFatalException(Exception):
+    """ Exception that can not be recovered from """
+    pass
 
 
 class JSONDecoder(DateTimeDecoder):
@@ -64,7 +75,7 @@ class JSONEncoder(DateTimeEncoder):
             return super(JSONEncoder, self).default(obj)
 
 
-class TVNext(with_metaclass(ABCMeta, Loadable)):
+class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
     """
     Abstract checker for new tv episodes
     """
@@ -121,12 +132,6 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
         """ Refresh interval for shows with error loading (min) (default: 10)
         :type : int """
 
-        self._requests_per_minute = settings.get(
-            'update_requests_per_minute', 0
-        )
-        """ Request per minute using the api - 0 means unlimited (default: 0)
-            :type : int """
-
         self._timezone = settings.get('timezone_default', "US/Pacific")
         """ Timezone to be used if not provided for show
             :type : datetime.timezone """
@@ -135,7 +140,6 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
             # If given as name -> convert to timezone with pytz
             self._timezone = pytz.timezone(self._timezone)
 
-        self._requests = []
         self._error_sleep_time = settings.get('update_retry_delay', 2.0)
         """ Time to sleep after error
             :type : float """
@@ -151,17 +155,41 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
         if self._cache_file:
             self._cache_file = os.path.join(self._cache_path, self._cache_file)
 
-            if os.path.exists(self._cache_file):
-                shows = self._loadJSONFile(
-                    self._cache_file, decoder=JSONDecoder
-                )
-                shows.update(self._shows)
-                self._shows.update(shows)
-            # Don't care whether cache file exitsts -> generate it
-            # else:
-            #    raise IOError(u"File '{}' not found".format(self._showPath))
+        self._lock_update = threading.RLock()
+        """ Lock to prevent concurrent access
+            :type : threading.RLock """
+
+    def start(self, blocking=False):
+        """
+        Start the interface
+
+        :param blocking: Should the call block until stop() is called
+            (default: False)
+        :type blocking: bool
+        :rtype: None
+        """
+        if self._cache_file and os.path.exists(self._cache_file):
+            shows = self._loadJSONFile(
+                self._cache_file, decoder=JSONDecoder
+            )
+            shows.update(self._shows)
+            self._shows.update(shows)
+        # Don't care whether cache file exitsts -> generate it
+        # else:
+        #    raise IOError(u"File '{}' not found".format(self._showPath))
         if self._show_file:
             self.show_name_file_load()
+        super(TVNext, self).start(blocking)
+
+    def stop(self):
+        """
+        Stop the interface
+
+        :rtype: None
+        """
+        self.debug("()")
+        super(TVNext, self).stop()
+        self.show_save_all()
 
     def show_name_file_load(self):
         """
@@ -191,6 +219,33 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
             raise IOError(u"File '{}' not found".format(self._show_file))
         self.debug(u"Loaded show names from {}".format(self._show_file))
 
+    def show_add(self, show, timezone=None):
+        """
+        Add new show with default params
+
+        :param show: Name of show
+        :type show: unicode
+        :param timezone: Timezone to add - None means no timezone
+            (Default: None)
+        :rtype: None
+        """
+        if isinstance(timezone, basestring):
+            timezone = pytz.timezone(timezone)
+        self._shows.setdefault(show, {})
+        if timezone:
+            self._shows[show]['air_timezone'] = timezone
+
+    def show_remove(self, show):
+        """
+        Remove show
+
+        :param show: Name of show
+        :type show: unicode
+        :rtype: None
+        """
+        if show in self._shows:
+            del self._shows[show]
+
     @property
     def shows(self):
         """
@@ -205,7 +260,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
 
     def show_save_all(self, path=None):
         """
-        Save shows
+        Save shows cache
 
         :param path: Path to save to (default: None)
             if None -> use cache_file
@@ -324,81 +379,139 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
         # Use generic access interval
         return diff.days >= self._access_interval
 
-    @abstractmethod
-    def show_update(self, key, autosave=False):
+    def show_update(self, key, force_check=False, auto_save=False):
         """
         Update show (and adds it if not already present)
 
+        :param force_check: Force information load (default: False)
+        :type force_check: bool
         :param key: Show name
         :type key: unicode
-        :param autosave: Save after update (default: False)
-        :type autosave: bool
+        :param auto_save: Save after update (default: False)
+        :type auto_save: bool
+        :rtype: None
+        """
+        if not (force_check or self.show_update_should(key)):
+            # Show information already up to date
+            return
+        retry = True
+        error_sleep = self._error_sleep_time
+        self.shows[key].setdefault('errors', 0)
+
+        while retry \
+                and self.shows[key]['errors'] < self._max_retries:
+            retry = False
+
+            # TODO: move into implementation (Backoff exception?) - fatal
+            try:
+                self._show_update(key)
+            except Exception as e:
+                if "connection reset by peer" in unicode(e).lower():
+                    # Connection reset by peer -> exponential backoff
+                    self.warning(
+                        u"Connection reset by peer (Sleeping {})".format(
+                            error_sleep
+                        )
+                    )
+                    time.sleep(error_sleep)
+                    error_sleep *= 2.0
+                else:
+                    self.exception(u"Failed to load {}".format(key))
+                self.shows[key]['errors'] += 1
+                retry = self._should_retry
+
+        if auto_save:
+            self.show_save_all()
+
+    @abstractmethod
+    def _show_update(self, key):
+        """
+        Update show (and adds it if not already present)
+
+        Overwrite to implement
+
+        :param key: Show name
+        :type key: unicode
         :rtype: None
         """
         raise NotImplementedError
 
-    def show_update_all(self, forcecheck=False, autosave=False):
+    def show_update_all(self, force_check=False, auto_save=False):
         """
         Update information for all shows
 
-        :param forcecheck: Force information load (default: False)
-        :type forcecheck: bool
-        :param autosave: Save after each update (default: False)
-        :type autosave: bool
+        :param force_check: Force information load (default: False)
+        :type force_check: bool
+        :param auto_save: Save after each update (default: False)
+        :type auto_save: bool
         :rtype: None
         """
         shows = self._shows
         for key in sorted(shows):
-            if not (forcecheck or self.show_update_should(key)):
-                continue
-            retry = True
-            error_sleep = self._error_sleep_time
-            shows[key].setdefault('errors', 0)
-
-            while retry \
-                    and shows[key]['errors'] < self._max_retries:
-                retry = False
-
-                # TODO: move into implementation (Backoff exception?)
-                try:
-                    self.show_update(key, autosave)
-                except Exception as e:
-                    if "connection reset by peer" in str(e).lower():
-                        # Connection reset by peer -> exponential backoff
-                        self.warning(
-                            u"Connection reset by peer (Sleeping {})".format(
-                                error_sleep
-                            )
-                        )
-                        time.sleep(error_sleep)
-                        error_sleep *= 2.0
-                    else:
-                        self.exception(u"Failed to load {}".format(key))
-                    shows[key]['errors'] += 1
-                    retry = self._should_retry
-        if not autosave:
+            self.show_update(key, force_check, auto_save)
+        if not auto_save:
             self.show_save_all()
 
-    def check(self, force_check=False, delta_min=None, delta_max=None,
-              autosave=False):
-        results = []
+    def check(self, key, force_check=False, delta_min=None, delta_max=None,
+              auto_save=False):
+        """
+        Check a single show for updates in a period
+        (adds it if not already present and updates info)
+
+        :param key: Show to check
+        :type key: unicode
+        :param force_check:  Force information load (default: False)
+        :type force_check: bool
+        :param delta_min: Time in the past (either date or delta from now)
+        :type delta_min: datetime.date | datetime.timedelta | int
+        :param delta_max: Time in the future (either date or delta from now)
+        :type delta_max: datetime.date | datetime.timedelta | int
+        :param auto_save: Save after each update (default: False)
+        :type auto_save: bool
+        :return: Show, episode pair matching the query
+        """
+        if not self._is_running:
+            self.warning("Not running")
+        # Delta as ints = days
+        if isinstance(delta_min, int):
+            delta_min = timedelta(days=delta_min)
+        if isinstance(delta_max, int):
+            delta_max = timedelta(days=delta_max)
+        # Delta defaults
         if delta_min is None:
             delta_min = timedelta()
         if delta_max is None:
             delta_max = timedelta()
 
-        self._requests = []
-        self.show_update_all(force_check, autosave)
         now = pytz.utc.localize(datetime.datetime.utcnow()).date()
-        day_min = now - delta_min
-        day_max = now + delta_max
+        if isinstance(delta_min, datetime.date):
+            # Delta as date
+            day_min = delta_min
+        else:
+            # Delta as timedelta
+            day_min = now - delta_min
+        if isinstance(delta_max, datetime.date):
+            # Delta as date
+            day_max = delta_max
+        else:
+            # Delta as timedelta
+            day_max = now + delta_max
+
+        # Wrong order
         if day_min > day_max:
             day_min, day_max = day_max, day_min
-        # self.info("Searching between {} and {}".format(day_min, day_max))
-        for key in sorted(self._shows):
-            show = self._shows[key]
+
+        with self._lock_update:
+            if key not in self.shows:
+                # Add missing
+                self.show_add(key)
+            # Update info
+            self.show_update(key, force_check, auto_save)
+
+            # self.info("Searching between {} and {}".format(day_min, day_max))
+            show = self.shows[key]
             episodes = self.show_episodes_flatten(key, show)
-            temp = []
+            results = []
 
             # More likely that recent epsiode selected -> backwards
             for ep in episodes[::-1]:
@@ -412,7 +525,28 @@ class TVNext(with_metaclass(ABCMeta, Loadable)):
                 if d > day_max or d < day_min:
                     # Out of range
                     continue
-                temp.append(ep.copy())
-            results.extend([(key, ep) for ep in temp])
+                results.append((key, ep.copy()))
+            return results
 
+    def check_all(self, keys=None,
+                  delta_min=None, delta_max=None,
+                  force_check=False, auto_save=False
+    ):
+        if not self._is_running:
+            self.warning("Not running")
+        results = []
+        with self._lock_update:
+            if keys is None:
+                keys = sorted(list(self.shows))
+                self.show_update_all(force_check, auto_save)
+                # All updates allready done
+                force_check = False
+                auto_save = True
+            for key in keys:
+                results.extend(
+                    self.check(
+                        key, force_check=force_check, auto_save=auto_save,
+                        delta_min=delta_min, delta_max=delta_max
+                    )
+                )
         return results

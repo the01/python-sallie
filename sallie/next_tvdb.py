@@ -9,8 +9,8 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.0"
-__date__ = "2016-04-29"
+__version__ = "0.2.1"
+__date__ = "2016-05-12"
 # Created: 2015-04-29 19:15
 
 import datetime
@@ -53,16 +53,16 @@ class TVNextTVDB(TVNext, BaseUI):
         cache = True
         if self._cache_path:
             cache = self._cache_path
+        self.debug("Using cache at {}".format(self._cache_path))
+        self.debug("Using cache file {}".format(self._cache_file))
         self._tvdb = tvdb_api.Tvdb(cache=cache, custom_ui=self.TVDBUI)
 
-    def show_update(self, key, autosave=False):
+    def _show_update(self, key):
         """
         Update show (and adds it if not already present)
 
         :param key: Show name
         :type key: str
-        :param autosave: Save after update (default: False)
-        :type autosave: bool
         :rtype: None
         """
         def _get_search_key(other): # pylint: disable=unused-argument
@@ -138,6 +138,3 @@ class TVNextTVDB(TVNext, BaseUI):
         show['episodes'] = episodes
         show['accessed'] = now
         show['errors'] = 0
-
-        if autosave and self._cache_file:
-            self.show_save_all()

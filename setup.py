@@ -9,8 +9,8 @@ __author__ = "d01 <Florian Jung>"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2015-16, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.0"
-__date__ = "2016-05-04"
+__version__ = "0.2.1"
+__date__ = "2016-05-12"
 # Created: ?
 
 try:
@@ -88,7 +88,12 @@ setup(
     ],
     install_requires=pypi,
     dependency_links=external,
-    scripts=["scripts/sallie"],
+    #scripts=["scripts/sallie"],
+    entry_points={
+        'console_scripts': [
+            "sallie=sallie.cli_main:main",
+        ]
+    },
     license="MIT License",
     keywords="sallie tv shows tvdb",
     classifiers=[
