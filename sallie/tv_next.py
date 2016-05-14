@@ -152,8 +152,9 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
 
         if self._cache_path:
             self._cache_path = self.joinPathPrefix(self._cache_path)
-        if self._cache_file:
-            self._cache_file = os.path.join(self._cache_path, self._cache_file)
+
+            if self._cache_file:
+                self._cache_file = os.path.join(self._cache_path, self._cache_file)
 
         self._lock_update = threading.RLock()
         """ Lock to prevent concurrent access
@@ -231,9 +232,10 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         """
         if isinstance(timezone, basestring):
             timezone = pytz.timezone(timezone)
-        self._shows.setdefault(show, {})
-        if timezone:
-            self._shows[show]['air_timezone'] = timezone
+        with self._lock_update:
+            self._shows.setdefault(show, {})
+            if timezone:
+                self._shows[show]['air_timezone'] = timezone
 
     def show_remove(self, show):
         """
@@ -243,8 +245,9 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         :type show: unicode
         :rtype: None
         """
-        if show in self._shows:
-            del self._shows[show]
+        with self._lock_update:
+            if show in self._shows:
+                del self._shows[show]
 
     @property
     def shows(self):
