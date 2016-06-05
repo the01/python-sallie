@@ -9,12 +9,13 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.1"
-__date__ = "2016-05-12"
+__version__ = "0.2.2"
+__date__ = "2016-06-05"
 # Created: 2015-04-29 19:15
 
 import datetime
 
+from flotils.logable import ModuleLogable
 import dateutil
 import pytz
 import tvdb_api
@@ -23,6 +24,13 @@ from tvdb_api import tvdb_attributenotfound, tvdb_episodenotfound, \
     tvdb_seasonnotfound, tvdb_shownotfound, tvdb_userabort
 
 from .tv_next import TVNext
+
+
+class Logger(ModuleLogable):
+    pass
+
+
+logger = Logger()
 
 
 class TVNextTVDB(TVNext, BaseUI):
@@ -40,7 +48,8 @@ class TVNextTVDB(TVNext, BaseUI):
             if spl[-1].startswith("(") and spl[-1].endswith(")"):
                 year = spl[-1][1:-1]
                 for series in allSeries:
-                    if series['firstaired'].split('-')[0] == year:
+                    if series.get('firstaired') and \
+                                    series['firstaired'].split('-')[0] == year:
                         # Same year -> assume this one
                         return series
             return allSeries[0]
