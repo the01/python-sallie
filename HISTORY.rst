@@ -4,6 +4,11 @@ History
 =======
 
 
+0.6.0b2 (2016-11-24)
+--------------------
+* Attempt fix for long running tvdb bug
+
+
 0.6.0b1 (2016-05-15)
 --------------------
 * Fix cache file bug
