@@ -5,7 +5,7 @@ History
 
 
 0.6.0b3 (2016-11-24)
---------------------
+=======
 * Attempt fix for long running tvdb bug
 
 
