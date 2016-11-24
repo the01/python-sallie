@@ -9,8 +9,8 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.2"
-__date__ = "2016-06-05"
+__version__ = "0.2.3"
+__date__ = "2016-11-24"
 # Created: 2015-04-29 19:15
 
 import datetime
@@ -64,7 +64,25 @@ class TVNextTVDB(TVNext, BaseUI):
             cache = self._cache_path
         self.debug("Using cache at {}".format(self._cache_path))
         self.debug("Using cache file {}".format(self._cache_file))
-        self._tvdb = tvdb_api.Tvdb(cache=cache, custom_ui=self.TVDBUI)
+        self._tvdb_cache = cache
+        self._tvdb = None
+        self._init_tvdb()
+
+    def _init_tvdb(self):
+        self.info("Initializing tvdb instance")
+        self._tvdb = tvdb_api.Tvdb(
+            cache=self._tvdb_cache, custom_ui=self.TVDBUI
+        )
+
+    def _key_error_retry(self, key):
+        if self._tvdb is None:
+            self._init_tvdb()
+        try:
+            return self._tvdb[key]
+        except KeyError as e:
+            self.warning("{}: Key error '{}'".format(key, e))
+            self._init_tvdb()
+            return self._tvdb[key]
 
     def _show_update(self, key):
         """
@@ -74,14 +92,14 @@ class TVNextTVDB(TVNext, BaseUI):
         :type key: str
         :rtype: None
         """
-        def _get_search_key(other): # pylint: disable=unused-argument
+        def _get_search_key(other):  # pylint: disable=unused-argument
             return key
         self.debug(u"Updating {}".format(key))
         show = self._shows.setdefault(key, {})
         now = pytz.utc.localize(datetime.datetime.utcnow())
         self.TVDBUI.getSearchKey = _get_search_key
         try:
-            tvdb_show = self._tvdb[key]
+            tvdb_show = self._key_error_retry(key)
         except tvdb_shownotfound as e:
             self.error(u"Show {}: {}".format(key, e))
             year = key.split()[-1]
