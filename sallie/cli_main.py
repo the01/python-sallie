@@ -8,8 +8,8 @@ __author__ = "d01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2016, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.0"
-__date__ = "2016-05-12"
+__version__ = "0.1.1"
+__date__ = "2017-07-28"
 # Created: 2016-05-12 18:04
 
 import argparse
@@ -277,7 +277,8 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
     :type reverse: bool
     :param max_delta: Delta in days into the future
     :type max_delta: None | int
-    :rtype: None
+    :return: List of episodes; None on failure
+    :rtype: None | list[unicode]
     """
     now = pytz.UTC.localize(datetime.datetime.utcnow())
 
@@ -286,15 +287,12 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
 
     def in_range(min_delta, ep, max_delta):
         date = get_aired(ep)
+        res = True
         # None -> dont care
         if min_delta is not None and now > date:
-            if (now - date) < min_delta:
-                return True
-            return False
+            return (now - date) < min_delta
         if max_delta is not None and now <= date:
-            if max_delta < (date - now):
-                return True
-            return False
+            return max_delta > (date - now)
         return True
 
     min_delta = datetime.timedelta(days=0)
@@ -329,8 +327,7 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
         formatted = sorted(formatted, reverse=True)
     if reverse:
         formatted = reversed(formatted)
-    for txt in formatted:
-        logger.info(txt)
+    return formatted
 
 
 def setup_parser():
@@ -446,7 +443,10 @@ def main():
             args.min, args.max
         )
     elif args.next:
-        shows_next(tv, args.next, args.sort, args.reverse, args.max)
+        eps = shows_next(tv, args.next, args.sort, args.reverse, args.max)
+        if eps:
+            for ep in eps:
+                logger.info("{}".format(ep))
     elif args.shows:
         for key in sorted(tv.shows, reverse=not args.reverse):
             logger.info(u"{}".format(key))
