@@ -1,2 +1,2 @@
-flake8
-pylint
+flake8==3.5.0
+pylint==1.8.1
