@@ -7,10 +7,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __author__ = "d01"
-__copyright__ = "Copyright (C) 2014-16, Florian JUNG"
+__copyright__ = "Copyright (C) 2014-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.2"
-__date__ = "2016-05-13"
+__version__ = "0.6.3"
+__date__ = "2018-11-05"
 # Created: 2014-05-18 04:08
 
 import datetime
@@ -20,22 +20,17 @@ import os
 import threading
 from collections import OrderedDict
 from abc import ABCMeta, abstractmethod
+import shutil
 
 import pytz
 from past.builtins import basestring
 from future.utils import with_metaclass
 
 from flotils.loadable import Loadable, DateTimeEncoder, DateTimeDecoder
-from flotils.logable import ModuleLogable
-from flotils import StartStopable
+from flotils import StartStopable, get_logger
 
 
-class Logger(ModuleLogable):
-    """ Module logger """
-    pass
-
-
-logger = Logger() # pylint: disable=invalid-name
+logger = get_logger()  # pylint: disable=invalid-name
 
 
 class TVNextException(Exception):
@@ -53,7 +48,7 @@ class JSONDecoder(DateTimeDecoder):
 
     @staticmethod
     def _as_tzinfo(dct):
-        if u"__pytzinfo__" in dct.keys():
+        if "__pytzinfo__" in dct.keys():
             return pytz.timezone(dct['__pytzinfo__'])
         raise TypeError("Not pytzinfo")
 
@@ -170,7 +165,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         :rtype: None
         """
         if self._cache_file and os.path.exists(self._cache_file):
-            shows = self._loadJSONFile(
+            shows = self._load_json_file(
                 self._cache_file, decoder=JSONDecoder
             )
             shows.update(self._shows)
@@ -272,17 +267,19 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         """
         if not path:
             path = self._cache_file
+        temp_path = path + "temp.json"
         try:
-            self._saveJSONFile(
-                path,
+            self._save_json_file(
+                temp_path,
                 self._shows,
                 pretty=True,
                 sort=True,
                 encoder=JSONEncoder
             )
-            self.info(u"Saved shows to {}".format(path))
+            shutil.move(temp_path, path)
+            self.info("Saved shows to {}".format(path))
         except:
-            self.exception(u"Failed to save shows to {}".format(path))
+            self.exception("Failed to save shows to {}".format(path))
 
     def show_episodes_flatten(self, key, show=None):
         """
@@ -328,7 +325,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         if accessed:
             diff = now - accessed
         else:
-            self.info(u"Never accessed {}".format(key))
+            self.info("Never accessed {}".format(key))
             return True
         # Update if errors last time
         if show.get('errors', 0) >= 3 and \
@@ -400,7 +397,6 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         retry = True
         error_sleep = self._error_sleep_time
         self.shows[key].setdefault('errors', 0)
-
         while retry \
                 and self.shows[key]['errors'] < self._max_retries:
             retry = False
@@ -409,17 +405,17 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
             try:
                 self._show_update(key)
             except Exception as e:
-                if "connection reset by peer" in unicode(e).lower():
+                if "connection reset by peer" in "{}".format(e).lower():
                     # Connection reset by peer -> exponential backoff
                     self.warning(
-                        u"Connection reset by peer (Sleeping {})".format(
+                        "Connection reset by peer (Sleeping {})".format(
                             error_sleep
                         )
                     )
                     time.sleep(error_sleep)
                     error_sleep *= 2.0
                 else:
-                    self.exception(u"Failed to load {}".format(key))
+                    self.exception("Failed to load {}".format(key))
                 self.shows[key]['errors'] += 1
                 retry = self._should_retry
 

@@ -6,10 +6,10 @@ from __future__ import unicode_literals
 
 __author__ = "d01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2016, Florian JUNG"
+__copyright__ = "Copyright (C) 2016-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.1"
-__date__ = "2017-07-28"
+__version__ = "0.1.2"
+__date__ = "2018-11-05"
 # Created: 2016-05-12 18:04
 
 import argparse
@@ -17,17 +17,13 @@ import datetime
 import logging.config
 
 import pytz
-from flotils import ModuleLogable
+from flotils import get_logger
 from flotils.logable import default_logging_config
 
 from . import TVNextTVDB
 
 
-class Logger(ModuleLogable):
-    pass
-
-
-logger = Logger()
+logger = get_logger()
 
 
 def shows_format(shows_list):
@@ -434,7 +430,7 @@ def main():
             tv.show_update_all(force_check=args.force, auto_save=args.autosave)
             check = True
         elif args.update not in tv.shows:
-            logger.error(u"Show {} not found".format(args.update))
+            logger.error("Show {} not found".format(args.update))
         else:
             tv.show_update(args.update, auto_save=args.autosave)
     if args.list:
@@ -449,11 +445,11 @@ def main():
                 logger.info("{}".format(ep))
     elif args.shows:
         for key in sorted(tv.shows, reverse=not args.reverse):
-            logger.info(u"{}".format(key))
+            logger.info("{}".format(key))
     elif args.missing:
         for key in sorted(tv.shows, reverse=not args.reverse):
             if len(tv.show_episodes_flatten(key)) == 0:
-                logger.info(u"Missing episodes for {}".format(key))
+                logger.info("Missing episodes for {}".format(key))
     else:
         check = True
     if check:

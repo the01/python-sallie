@@ -7,15 +7,15 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __author__ = "d01"
-__copyright__ = "Copyright (C) 2016, Florian JUNG"
+__copyright__ = "Copyright (C) 2016-18, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.3"
-__date__ = "2016-11-24"
+__version__ = "0.2.4"
+__date__ = "2018-11-05"
 # Created: 2015-04-29 19:15
 
 import datetime
 
-from flotils.logable import ModuleLogable
+from flotils import get_logger
 import dateutil
 import pytz
 import tvdb_api
@@ -26,11 +26,7 @@ from tvdb_api import tvdb_attributenotfound, tvdb_episodenotfound, \
 from .tv_next import TVNext
 
 
-class Logger(ModuleLogable):
-    pass
-
-
-logger = Logger()
+logger = get_logger()
 
 
 class TVNextTVDB(TVNext, BaseUI):
@@ -94,24 +90,24 @@ class TVNextTVDB(TVNext, BaseUI):
         """
         def _get_search_key(other):  # pylint: disable=unused-argument
             return key
-        self.debug(u"Updating {}".format(key))
+        self.debug("Updating {}".format(key))
         show = self._shows.setdefault(key, {})
         now = pytz.utc.localize(datetime.datetime.utcnow())
         self.TVDBUI.getSearchKey = _get_search_key
         try:
             tvdb_show = self._key_error_retry(key)
         except tvdb_shownotfound as e:
-            self.error(u"Show {}: {}".format(key, e))
+            self.error("Show {}: {}".format(key, e))
             year = key.split()[-1]
             if year.startswith("(") and year.endswith(")"):
                 # Assume year info
                 new_key = key.rstrip(" " + year)
-                self.info(u"Trying {} instead".format(new_key))
+                self.info("Trying {} instead".format(new_key))
                 # Try without year info
                 try:
                     tvdb_show = self._tvdb[new_key]
                 except tvdb_shownotfound as e2:
-                    self.error(u"Show {}: {}".format(new_key, e2))
+                    self.error("Show {}: {}".format(new_key, e2))
                     return
             else:
                 return
