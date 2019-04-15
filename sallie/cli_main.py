@@ -6,10 +6,10 @@ from __future__ import unicode_literals
 
 __author__ = "d01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2016-18, Florian JUNG"
+__copyright__ = "Copyright (C) 2016-19, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.2"
-__date__ = "2018-11-05"
+__version__ = "0.1.3"
+__date__ = "2019-04-15"
 # Created: 2016-05-12 18:04
 
 import argparse
@@ -17,13 +17,13 @@ import datetime
 import logging.config
 
 import pytz
-from flotils import get_logger
+import flotils
 from flotils.logable import default_logging_config
 
 from . import TVNextTVDB
 
 
-logger = get_logger()
+logger = flotils.get_logger()
 
 
 def shows_format(shows_list):
@@ -422,39 +422,44 @@ def main():
         'path_prefix': args.pre_path
     })
 
-    tv.start(blocking=False)
     check = args.check
-    if args.update:
-        check = False
-        if args.update == "all":
-            tv.show_update_all(force_check=args.force, auto_save=args.autosave)
-            check = True
-        elif args.update not in tv.shows:
-            logger.error("Show {} not found".format(args.update))
+    tv.start(blocking=False)
+    try:
+        if args.update:
+            check = False
+            if args.update == "all":
+                tv.show_update_all(
+                    force_check=args.force, auto_save=args.autosave
+                )
+                check = True
+            elif args.update not in tv.shows:
+                logger.error("Show {} not found".format(args.update))
+            else:
+                tv.show_update(args.update, auto_save=args.autosave)
+        if args.list:
+            shows_list(
+                tv, args.list, args.sort, args.reverse, args.all,
+                args.min, args.max
+            )
+        elif args.next:
+            eps = shows_next(tv, args.next, args.sort, args.reverse, args.max)
+            if eps:
+                for ep in eps:
+                    logger.info("{}".format(ep))
+        elif args.shows:
+            for key in sorted(tv.shows, reverse=not args.reverse):
+                logger.info("{}".format(key))
+        elif args.missing:
+            for key in sorted(tv.shows, reverse=not args.reverse):
+                if len(tv.show_episodes_flatten(key)) == 0:
+                    logger.info("Missing episodes for {}".format(key))
         else:
-            tv.show_update(args.update, auto_save=args.autosave)
-    if args.list:
-        shows_list(
-            tv, args.list, args.sort, args.reverse, args.all,
-            args.min, args.max
-        )
-    elif args.next:
-        eps = shows_next(tv, args.next, args.sort, args.reverse, args.max)
-        if eps:
-            for ep in eps:
-                logger.info("{}".format(ep))
-    elif args.shows:
-        for key in sorted(tv.shows, reverse=not args.reverse):
-            logger.info("{}".format(key))
-    elif args.missing:
-        for key in sorted(tv.shows, reverse=not args.reverse):
-            if len(tv.show_episodes_flatten(key)) == 0:
-                logger.info("Missing episodes for {}".format(key))
-    else:
-        check = True
-    if check:
-        shows_check(
-            tv,
-            autosave=args.autosave, forcecheck=args.force,
-            min_delta=args.min, max_delta=args.max
-        )
+            check = True
+        if check:
+            shows_check(
+                tv,
+                autosave=args.autosave, forcecheck=args.force,
+                min_delta=args.min, max_delta=args.max
+            )
+    finally:
+        tv.stop()

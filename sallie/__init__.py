@@ -9,10 +9,10 @@ from __future__ import unicode_literals
 
 __author__ = "the01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2014-18, Florian JUNG"
+__copyright__ = "Copyright (C) 2014-19, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.3"
-__date__ = "2018-11-05"
+__version__ = "0.6.4"
+__date__ = "2019-04-14"
 # Created: 2015-02-26 03:39
 
 import logging
@@ -22,4 +22,7 @@ from .next_tvdb import TVNextTVDB
 from .cli_main import main
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-__all__ = ["tv_next", "next_tvdb", "cli_main"]
+__all__ = [
+    "tv_next", "next_tvdb", "cli_main",
+    "TVNext", "TVNextTVDB", "main",
+]

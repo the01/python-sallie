@@ -7,10 +7,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __author__ = "d01"
-__copyright__ = "Copyright (C) 2014-18, Florian JUNG"
+__copyright__ = "Copyright (C) 2014-19, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.3"
-__date__ = "2018-11-05"
+__version__ = "0.6.4"
+__date__ = "2019-04-14"
 # Created: 2014-05-18 04:08
 
 import datetime
@@ -19,18 +19,18 @@ import time
 import os
 import threading
 from collections import OrderedDict
-from abc import ABCMeta, abstractmethod
+import abc
 import shutil
 
 import pytz
 from past.builtins import basestring
 from future.utils import with_metaclass
-
+import flotils
 from flotils.loadable import Loadable, DateTimeEncoder, DateTimeDecoder
-from flotils import StartStopable, get_logger
+from flotils import StartStopable
 
 
-logger = get_logger()  # pylint: disable=invalid-name
+logger = flotils.get_logger()  # pylint: disable=invalid-name
 
 
 class TVNextException(Exception):
@@ -40,6 +40,11 @@ class TVNextException(Exception):
 
 class TVNextFatalException(Exception):
     """ Exception that can not be recovered from """
+    pass
+
+
+class TVNextNotFoundException(Exception):
+    """ Show not found """
     pass
 
 
@@ -55,9 +60,14 @@ class JSONDecoder(DateTimeDecoder):
     @staticmethod
     def decode(dct):
         try:
-            return JSONDecoder._as_tzinfo(dct)
+            if isinstance(dct, dict):
+                return JSONDecoder._as_tzinfo(dct)
         except:
-            return super(JSONDecoder, JSONDecoder).decode(dct)
+            pass
+        res = super(JSONDecoder, JSONDecoder).decode(dct)
+        if isinstance(res, datetime.datetime):
+            res = res.replace(tzinfo=pytz.UTC)
+        return res
 
 
 class JSONEncoder(DateTimeEncoder):
@@ -70,10 +80,12 @@ class JSONEncoder(DateTimeEncoder):
             return super(JSONEncoder, self).default(obj)
 
 
-class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
+class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
+#class TVNext(Loadable, StartStopable):
     """
     Abstract checker for new tv episodes
     """
+#    __metaclass__ = abc.ABCMeta
 
     def __init__(self, settings=None):
         """
@@ -108,12 +120,12 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         self._access_interval_hiatus = settings.get(
             'update_interval_hiatus', None
         )
-        """ Refresh interval for shows marked as hiatus (default: None)
+        """ Refresh interval for shows marked as hiatus in days (default: None)
         :type : None | int """
         self._access_interval_inactive = settings.get(
             'update_interval_inactive', None
         )
-        """ Refresh interval for shows marked as inactive (default: None)
+        """ Refresh interval for shows marked as inactive in days (default: None)
         :type : None | int """
         self._access_interval_aired = settings.get(
             'update_interval_aired', None
@@ -146,10 +158,12 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
             :type : bool """
 
         if self._cache_path:
-            self._cache_path = self.joinPathPrefix(self._cache_path)
+            self._cache_path = self.join_path_prefix(self._cache_path)
 
             if self._cache_file:
-                self._cache_file = os.path.join(self._cache_path, self._cache_file)
+                self._cache_file = os.path.join(
+                    self._cache_path, self._cache_file
+                )
 
         self._lock_update = threading.RLock()
         """ Lock to prevent concurrent access
@@ -172,7 +186,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
             self._shows.update(shows)
         # Don't care whether cache file exitsts -> generate it
         # else:
-        #    raise IOError(u"File '{}' not found".format(self._showPath))
+        #    raise IOError("File '{}' not found".format(self._showPath))
         if self._show_file:
             self.show_name_file_load()
         super(TVNext, self).start(blocking)
@@ -185,7 +199,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         """
         self.debug("()")
         super(TVNext, self).stop()
-        self.show_save_all()
+        # self.show_save_all()
 
     def show_name_file_load(self):
         """
@@ -195,10 +209,10 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         :raises IOError: File not found
         :raises IOError: Failed to load
         """
-        self._show_file = self.joinPathPrefix(self._show_file)
+        self._show_file = self.join_path_prefix(self._show_file)
 
         if os.path.exists(self._show_file):
-            show_names = self._loadJSONFile(
+            show_names = self._load_json_file(
                 self._show_file, decoder=JSONDecoder
             )
             """ :type : list[str | (str, str)] """
@@ -212,8 +226,8 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
                 self._shows.setdefault(name, {})
                 self._shows[name]['air_timezone'] = timezone
         else:
-            raise IOError(u"File '{}' not found".format(self._show_file))
-        self.debug(u"Loaded show names from {}".format(self._show_file))
+            raise IOError("File '{}' not found".format(self._show_file))
+        self.debug("Loaded show names from {}".format(self._show_file))
 
     def show_add(self, show, timezone=None):
         """
@@ -329,8 +343,8 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
             return True
         # Update if errors last time
         if show.get('errors', 0) >= 3 and \
-                diff.total_seconds() / 60 >= self._access_interval_error:
-            self.info(u"Error retry {}".format(key))
+                diff.days >= self._access_interval_error:
+            self.info("Error retry {}".format(key))
             # Only retry once
             show['errors'] = max(1, self._max_retries - 1)
             return True
@@ -346,7 +360,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
                     continue
                 # TODO: make sure tzinfo is correctly loaded
                 if aired.tzinfo is None:
-                    self.warning(u"Unset tzinfo in {} ({})".format(
+                    self.warning("Unset tzinfo in {} ({})".format(
                         key, ep['id']
                     ))
                     aired = pytz.utc.localize(aired)
@@ -355,7 +369,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
                     continue
                 if (aired - accessed).days >= self._access_interval_aired:
                     # Last access before aired
-                    self.debug(u"Aired {} ago {}".format(now - aired, key))
+                    self.debug("Aired {} ago {}".format(now - aired, key))
                     return True
                 else:
                     # Out of reach
@@ -397,6 +411,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         retry = True
         error_sleep = self._error_sleep_time
         self.shows[key].setdefault('errors', 0)
+
         while retry \
                 and self.shows[key]['errors'] < self._max_retries:
             retry = False
@@ -404,6 +419,13 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
             # TODO: move into implementation (Backoff exception?) - fatal
             try:
                 self._show_update(key)
+            except TVNextNotFoundException:
+                # Show not found
+                self.shows[key]['errors'] = self._max_retries
+                self.shows[key]['accessed'] = pytz.utc.localize(
+                    datetime.datetime.utcnow()
+                )
+                break
             except Exception as e:
                 if "connection reset by peer" in "{}".format(e).lower():
                     # Connection reset by peer -> exponential backoff
@@ -422,7 +444,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         if auto_save:
             self.show_save_all()
 
-    @abstractmethod
+    @abc.abstractmethod
     def _show_update(self, key):
         """
         Update show (and adds it if not already present)
@@ -451,8 +473,10 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         if not auto_save:
             self.show_save_all()
 
-    def check(self, key, force_check=False, delta_min=None, delta_max=None,
-              auto_save=False):
+    def check(
+            self, key, force_check=False, delta_min=None, delta_max=None,
+            auto_save=False
+    ):
         """
         Check a single show for updates in a period
         (adds it if not already present and updates info)
@@ -469,7 +493,7 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
         :type auto_save: bool
         :return: Show, episode pair matching the query
         """
-        if not self._is_running:
+        if not self.is_running:
             self.warning("Not running")
         # Delta as ints = days
         if isinstance(delta_min, int):
@@ -527,9 +551,9 @@ class TVNext(with_metaclass(ABCMeta, Loadable, StartStopable)):
                 results.append((key, ep.copy()))
             return results
 
-    def check_all(self, keys=None,
-                  delta_min=None, delta_max=None,
-                  force_check=False, auto_save=False
+    def check_all(
+            self, keys=None, delta_min=None, delta_max=None,
+            force_check=False, auto_save=False
     ):
         if not self._is_running:
             self.warning("Not running")
