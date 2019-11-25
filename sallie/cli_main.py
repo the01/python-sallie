@@ -463,3 +463,7 @@ def main():
             )
     finally:
         tv.stop()
+
+
+if __name__ == "__main__":
+    main()

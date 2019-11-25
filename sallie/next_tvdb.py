@@ -9,8 +9,8 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016-19, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.5"
-__date__ = "2019-04-14"
+__version__ = "0.2.6"
+__date__ = "2019-11-25"
 # Created: 2015-04-29 19:15
 
 import datetime
@@ -98,7 +98,7 @@ class TVNextTVDB(TVNext):
         def _get_search_key(other):  # pylint: disable=unused-argument
             return key
 
-        self.debug("Updating {}".format(key))
+        self.debug("Updating {}..".format(key))
         show = self._shows.setdefault(key, {})
         now = pytz.utc.localize(datetime.datetime.utcnow())
         self.TVDBUI.getSearchKey = _get_search_key
@@ -122,19 +122,23 @@ class TVNextTVDB(TVNext):
                 self.error("Show {}: {}".format(key, e))
                 raise TVNextNotFoundException(key)
 
+        # self.debug("{}".format(tvdb_show))
+        # for key, item in tvdb_show.data.items():
+        #    self.debug("\n {}: {}".format(key, item))
+        # for key, item in tvdb_show.items():
+        #    self.debug("\n {}: {}".format(key, item))
         # for item in tvdb_show[0][1].keys():
-        #    self.debug(u"\n     {}: {}".format(item, tvdb_show[0][1][item]))
-        # self.debug(u"{}".format(tvdb_show))
+        #    self.debug("\n     {}: {}".format(item, tvdb_show[0][1][item]))
         show['id_tvdb'] = tvdb_show['id']
-        show['id_imdb'] = tvdb_show['imdb_id']
+        show['id_imdb'] = tvdb_show['imdbId']
         show['name'] = tvdb_show['seriesname']
         show['overview'] = tvdb_show['overview']
         show['status'] = tvdb_show.get('status', "").upper()
         show['active'] = show['status'] != "ENDED"
         show['hiatus'] = False
         show['air_duration'] = tvdb_show['runtime']
-        show['air_day'] = tvdb_show['airs_dayofweek']
-        show['air_time'] = tvdb_show['airs_time']
+        show['air_day'] = tvdb_show['airsDayOfWeek']
+        show['air_time'] = tvdb_show['airsTime']
         show.setdefault('air_timezone', self._timezone)
 
         if isinstance(show['air_timezone'], basestring):
@@ -151,17 +155,30 @@ class TVNextTVDB(TVNext):
             episodes.setdefault(season_nr, {})
             # episode db id name: id_<unique_name_for_source>
             for episode_nr in tvdb_show[season_nr]:
+                # for key, item in tvdb_show[season_nr][episode_nr].items():
+                #     self.debug("\nep:  {}: {}".format(key, item))
                 episodes[season_nr][episode_nr] = {
                     'id_tvdb': tvdb_show[season_nr][episode_nr]['id'],
-                    'id_imdb': tvdb_show[season_nr][episode_nr]['imdb_id'],
+                    'id_imdb': tvdb_show[season_nr][episode_nr]['imdbId'],
                     'aired': None,
-                    'name': tvdb_show[season_nr][episode_nr]['episodename'],
+                    'name': tvdb_show[season_nr][episode_nr]['episodeName'],
                     'id': u"{:02d}x{:02d}".format(season_nr, episode_nr)
                 }
-                aired = tvdb_show[season_nr][episode_nr]['firstaired']
+                aired = tvdb_show[season_nr][episode_nr]['firstAired']
                 if aired:
                     # Use datetime instead of date for tz info localization
-                    aired = dateutil.parser.parse(aired)
+                    try:
+                        aired = dateutil.parser.parse(aired)
+                    except:
+                        if aired == "0000-00-00":
+                            self.error("Invalid aired date: {}-{}x{}".format(
+                                key, season_nr, episode_nr
+                            ))
+                        else:
+                            self.exception("Failed to parse date: {}".format(
+                                aired
+                            ))
+                        aired = None
                 if aired and air_time:
                     aired = datetime.datetime.combine(
                         aired.date(), air_time
