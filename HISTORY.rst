@@ -4,14 +4,19 @@ History
 =======
 
 
+0.6.5 (2019-11-25)
+------------------
+* Update tvdb_api to 2.0
+
+
 0.6.3 (2018-11-05)
-=======
+------------------
 * Update flotils
 * Improve file saving
 
 
 0.6.0b3 (2016-11-24)
-=======
+--------------------
 * Attempt fix for long running tvdb bug
 
 
