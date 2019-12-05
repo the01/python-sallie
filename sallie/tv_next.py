@@ -9,8 +9,8 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2014-19, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.4"
-__date__ = "2019-04-14"
+__version__ = "0.6.5"
+__date__ = "2019-12-05"
 # Created: 2014-05-18 04:08
 
 import datetime
@@ -403,11 +403,13 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
         :type key: unicode
         :param auto_save: Save after update (default: False)
         :type auto_save: bool
-        :rtype: None
+        :return: Changed
+        :rtype: bool
         """
         if not (force_check or self.show_update_should(key)):
             # Show information already up to date
-            return
+            return False
+        changed = False
         retry = True
         error_sleep = self._error_sleep_time
         self.shows[key].setdefault('errors', 0)
@@ -418,13 +420,14 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
 
             # TODO: move into implementation (Backoff exception?) - fatal
             try:
-                self._show_update(key)
+                changed = self._show_update(key)
             except TVNextNotFoundException:
                 # Show not found
                 self.shows[key]['errors'] = self._max_retries
                 self.shows[key]['accessed'] = pytz.utc.localize(
                     datetime.datetime.utcnow()
                 )
+                changed = True
                 break
             except Exception as e:
                 if "connection reset by peer" in "{}".format(e).lower():
@@ -440,9 +443,11 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
                     self.exception("Failed to load {}".format(key))
                 self.shows[key]['errors'] += 1
                 retry = self._should_retry
+                changed = True
 
-        if auto_save:
+        if auto_save and changed:
             self.show_save_all()
+        return changed
 
     @abc.abstractmethod
     def _show_update(self, key):
@@ -453,7 +458,8 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
 
         :param key: Show name
         :type key: unicode
-        :rtype: None
+        :return: Changed
+        :rtype: bool
         """
         raise NotImplementedError
 
@@ -468,9 +474,10 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
         :rtype: None
         """
         shows = self._shows
+        changed = False
         for key in sorted(shows):
-            self.show_update(key, force_check, auto_save)
-        if not auto_save:
+            changed = changed or self.show_update(key, force_check, auto_save)
+        if not auto_save and changed:
             self.show_save_all()
 
     def check(
@@ -529,7 +536,7 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
                 # Add missing
                 self.show_add(key)
             # Update info
-            self.show_update(key, force_check, auto_save)
+            changed = self.show_update(key, force_check, auto_save)
 
             # self.info("Searching between {} and {}".format(day_min, day_max))
             show = self.shows[key]
@@ -564,7 +571,7 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
                 self.show_update_all(force_check, auto_save)
                 # All updates allready done
                 force_check = False
-                auto_save = True
+                auto_save = False
             for key in keys:
                 results.extend(
                     self.check(

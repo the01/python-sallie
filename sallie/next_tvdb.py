@@ -9,8 +9,8 @@ from __future__ import unicode_literals
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016-19, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.6"
-__date__ = "2019-11-25"
+__version__ = "0.2.7"
+__date__ = "2019-12-05"
 # Created: 2015-04-29 19:15
 
 import datetime
@@ -93,12 +93,14 @@ class TVNextTVDB(TVNext):
 
         :param key: Show name
         :type key: str
-        :rtype: None
+        :return: Changed (Might not really have changed - but successfull read)
+        :rtype: bool
         """
         def _get_search_key(other):  # pylint: disable=unused-argument
             return key
 
         self.debug("Updating {}..".format(key))
+        changed = False
         show = self._shows.setdefault(key, {})
         now = pytz.utc.localize(datetime.datetime.utcnow())
         self.TVDBUI.getSearchKey = _get_search_key
@@ -192,3 +194,5 @@ class TVNextTVDB(TVNext):
         show['episodes'] = episodes
         show['accessed'] = now
         show['errors'] = 0
+        # Might not really have changed - but successfull read
+        return True

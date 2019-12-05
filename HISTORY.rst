@@ -4,6 +4,11 @@ History
 =======
 
 
+0.6.6 (2019-12-05)
+------------------
+* Save shows only on changes
+
+
 0.6.5 (2019-11-25)
 ------------------
 * Update tvdb_api to 2.0
