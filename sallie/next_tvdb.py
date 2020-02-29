@@ -14,6 +14,7 @@ __date__ = "2020-02-29"
 # Created: 2015-04-29 19:15
 
 import datetime
+import difflib
 
 import flotils
 import dateutil
@@ -21,9 +22,6 @@ import dateutil.parser
 import pytz
 from past.builtins import basestring
 import tvdb_api
-from tvdb_api import BaseUI
-from tvdb_api import tvdb_attributenotfound, tvdb_episodenotfound, \
-    tvdb_seasonnotfound, tvdb_shownotfound, tvdb_userabort
 
 from .tv_next import TVNext, TVNextNotFoundException
 
@@ -36,21 +34,44 @@ class TVNextTVDB(TVNext):
     Check tv shows with tvdb
     """
 
-    class TVDBUI(BaseUI):
+    class TVDBUI(tvdb_api.BaseUI):
         """ Class to select a show based on year """
         # pylint: disable=invalid-name
 
+        current = None
+
         def selectSeries(self, allSeries):
-            key = self.getSearchKey()
-            spl = key.split()
-            if spl[-1].startswith("(") and spl[-1].endswith(")"):
-                year = spl[-1][1:-1]
-                for series in allSeries:
-                    if series.get('firstaired') and \
-                            series['firstaired'].split('-')[0] == year:
+            tvnext = self.config['tvnext']
+            """ :type : TVNextTVDB """
+
+            key = self.current['key']
+            year = self.current.get('year')
+            allSeries = [
+                (
+                    series,
+                    difflib.SequenceMatcher(
+                        None, key, series.get('seriesName', "")
+                    ).ratio()
+                )
+                for series in allSeries
+            ]
+            allSeries.sort(key=lambda x: x[1], reverse=True)
+            tvnext.debug(
+                "Options: {}".format(",".join([
+                    "{} ({:.2f})".format(series.get('seriesName'), ratio)
+                    for series, ratio in allSeries
+                ])
+            ))
+            parts = key.split()
+
+            if year:
+                year = parts[-1][1:-1]
+                for series, ratio in allSeries:
+                    if series.get('firstAired') and \
+                            series['firstAired'].split('-')[0] == year:
                         # Same year -> assume this one
                         return series
-            return allSeries[0]
+            return allSeries[0][0]
 
     def __init__(self, settings=None):
         if settings is None:
@@ -67,7 +88,7 @@ class TVNextTVDB(TVNext):
         self._init_tvdb()
 
     def _init_tvdb(self):
-        self.info("Initializing tvdb instance")
+        self.debug("Initializing tvdb instance..")
         self._tvdb = tvdb_api.Tvdb(
             cache=self._tvdb_cache, custom_ui=self.TVDBUI
         )
@@ -76,6 +97,8 @@ class TVNextTVDB(TVNext):
             self._tvdb.config['cache_enabled'] = True
         else:
             self._tvdb.config['cache_enabled'] = False
+        self._tvdb.config['tvnext'] = self
+        self.info("TVDB instance initialized")
 
     def _key_error_retry(self, key):
         if self._tvdb is None:
@@ -96,28 +119,33 @@ class TVNextTVDB(TVNext):
         :return: Changed (Might not really have changed - but successfull read)
         :rtype: bool
         """
-        def _get_search_key(other):  # pylint: disable=unused-argument
-            return key
-
         self.debug("Updating {}..".format(key))
         changed = False
         show = self._shows.setdefault(key, {})
         now = pytz.utc.localize(datetime.datetime.utcnow())
-        self.TVDBUI.getSearchKey = _get_search_key
+        year = None
+        year_part = key.split()[-1]
+
+        if year_part.startswith("(") and year_part.endswith(")"):
+            # Assume year info
+            year = year_part[1:-1]
+
+        self.TVDBUI.current = {
+            'key': key,
+            'year': year,
+        }
 
         try:
             tvdb_show = self._key_error_retry(key)
-        except tvdb_shownotfound as e:
-            year = key.split()[-1]
-
-            if year.startswith("(") and year.endswith(")"):
+        except tvdb_api.tvdb_shownotfound as e:
+            if year:
                 # Assume year info
-                new_key = key.rstrip(" " + year)
-                self.info("Trying {} instead".format(new_key))
+                new_key = " ".join(key.split()[:-1])
+                self.info("Trying {} instead..".format(new_key))
                 # Try without year info
                 try:
                     tvdb_show = self._tvdb[new_key]
-                except tvdb_shownotfound as e2:
+                except tvdb_api.tvdb_shownotfound as e2:
                     self.error("Show {}: {}".format(new_key, e2))
                     raise TVNextNotFoundException(new_key)
             else:

@@ -4,6 +4,11 @@ History
 =======
 
 
+0.6.8 (2020-02-29)
+------------------
+* Update multiple candidate match logic
+
+
 0.6.7 (2020-02-29)
 ------------------
 * cli: add nosave flag
