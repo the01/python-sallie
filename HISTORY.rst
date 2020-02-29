@@ -4,6 +4,16 @@ History
 =======
 
 
+0.6.7 (2020-02-29)
+------------------
+* cli: add nosave flag
+* cli: do not automatically check for new shows after update
+* cli: save after update (once)
+* bug fix: show status not set for tvdb
+* bug fix: update_all updates only first show
+* allow force update with errors
+
+
 0.6.6 (2019-12-05)
 ------------------
 * Save shows only on changes
