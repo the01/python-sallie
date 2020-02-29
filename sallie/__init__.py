@@ -9,10 +9,10 @@ from __future__ import unicode_literals
 
 __author__ = "the01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2014-19, Florian JUNG"
+__copyright__ = "Copyright (C) 2014-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.6"
-__date__ = "2019-12-05"
+__version__ = "0.6.7"
+__date__ = "2020-02-29"
 # Created: 2015-02-26 03:39
 
 import logging

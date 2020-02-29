@@ -370,6 +370,10 @@ def setup_parser():
         help="Auto save after every show"
     )
     parser.add_argument(
+        "--nosave", action="store_true", default=False,
+        help="Do not save at the end",
+    )
+    parser.add_argument(
         "--missing", action="store_true",
         help="Which shows have no episodes"
     )
@@ -411,6 +415,7 @@ def setup_parser():
 def main():
     logging.config.dictConfig(default_logging_config)
     logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger('tvdb_api').setLevel(logging.INFO)
 
     parser = setup_parser()
     args = parser.parse_args()
@@ -423,19 +428,21 @@ def main():
     })
 
     check = args.check
+    saved = False
     tv.start(blocking=False)
     try:
         if args.update:
-            check = False
             if args.update == "all":
                 tv.show_update_all(
                     force_check=args.force, auto_save=args.autosave
                 )
-                check = True
+                saved = True
             elif args.update not in tv.shows:
                 logger.error("Show {} not found".format(args.update))
             else:
-                tv.show_update(args.update, auto_save=args.autosave)
+                saved = tv.show_update(
+                    args.update, force_check=args.force, auto_save=args.autosave,
+                ) and args.autosave
         if args.list:
             shows_list(
                 tv, args.list, args.sort, args.reverse, args.all,
@@ -453,7 +460,7 @@ def main():
             for key in sorted(tv.shows, reverse=not args.reverse):
                 if len(tv.show_episodes_flatten(key)) == 0:
                     logger.info("Missing episodes for {}".format(key))
-        else:
+        elif not args.update:
             check = True
         if check:
             shows_check(
@@ -461,6 +468,9 @@ def main():
                 autosave=args.autosave, forcecheck=args.force,
                 min_delta=args.min, max_delta=args.max
             )
+            saved = True
+        if not args.nosave and not saved:
+            tv.show_save_all()
     finally:
         tv.stop()
 

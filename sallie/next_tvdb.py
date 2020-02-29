@@ -7,10 +7,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __author__ = "d01"
-__copyright__ = "Copyright (C) 2016-19, Florian JUNG"
+__copyright__ = "Copyright (C) 2016-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.7"
-__date__ = "2019-12-05"
+__version__ = "0.2.8"
+__date__ = "2020-02-29"
 # Created: 2015-04-29 19:15
 
 import datetime
@@ -135,7 +135,7 @@ class TVNextTVDB(TVNext):
         show['id_imdb'] = tvdb_show['imdbId']
         show['name'] = tvdb_show['seriesname']
         show['overview'] = tvdb_show['overview']
-        show['status'] = tvdb_show.get('status', "").upper()
+        show['status'] = tvdb_show.data.get('status', "").upper()
         show['active'] = show['status'] != "ENDED"
         show['hiatus'] = False
         show['air_duration'] = tvdb_show['runtime']

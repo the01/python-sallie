@@ -7,10 +7,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 __author__ = "d01"
-__copyright__ = "Copyright (C) 2014-19, Florian JUNG"
+__copyright__ = "Copyright (C) 2014-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.5"
-__date__ = "2019-12-05"
+__version__ = "0.6.6"
+__date__ = "2020-02-29"
 # Created: 2014-05-18 04:08
 
 import datetime
@@ -80,8 +80,7 @@ class JSONEncoder(DateTimeEncoder):
             return super(JSONEncoder, self).default(obj)
 
 
-class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
-#class TVNext(Loadable, StartStopable):
+class TVNext(Loadable, StartStopable, abc.ABC):
     """
     Abstract checker for new tv episodes
     """
@@ -314,7 +313,7 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
         eps = show['episodes']
         return [eps[s_nr][e_nr] for s_nr in eps for e_nr in eps[s_nr]]
 
-    def show_update_should(self, key):
+    def show_update_should(self, key, force_check=False):
         """
         Decide if show needs updating
 
@@ -343,12 +342,14 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
             return True
         # Update if errors last time
         if show.get('errors', 0) >= 3 and \
-                diff.days >= self._access_interval_error:
+                (diff.days >= self._access_interval_error or force_check):
             self.info("Error retry {}".format(key))
             # Only retry once
             show['errors'] = max(1, self._max_retries - 1)
             return True
 
+        if force_check:
+            return True
         if self._access_interval_aired is not None:
             # Update after new episode aired (in last x days)
             # Reverse list (newest first)
@@ -406,7 +407,7 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
         :return: Changed
         :rtype: bool
         """
-        if not (force_check or self.show_update_should(key)):
+        if not self.show_update_should(key, force_check):
             # Show information already up to date
             return False
         changed = False
@@ -476,7 +477,7 @@ class TVNext(with_metaclass(abc.ABCMeta, Loadable, StartStopable)):
         shows = self._shows
         changed = False
         for key in sorted(shows):
-            changed = changed or self.show_update(key, force_check, auto_save)
+            changed = self.show_update(key, force_check, auto_save) or changed
         if not auto_save and changed:
             self.show_save_all()
 
