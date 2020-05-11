@@ -1,10 +1,17 @@
-include requirements.txt
-include AUTHORS.rst
 include HISTORY.rst
 include LICENSE
 include README.rst
 
+include setup.py
+include setup.cfg
+include tox.ini
+include requirements.txt
+include requirements-test.txt
+include requirements-dev.txt
+recursive-include src *.py
+
+
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
 
-recursive-include docs *.rst conf.py Makefile make.bat
+recursive-include docs *.rst

@@ -1,54 +1,49 @@
 # -*- coding: UTF-8 -*-
 """ Base class for tv checks """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2014-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.6.6"
-__date__ = "2020-02-29"
+__version__ = "0.6.8"
+__date__ = "2020-05-11"
 # Created: 2014-05-18 04:08
 
+import abc
+from collections import OrderedDict
 import datetime
 from datetime import timedelta
-import time
 import os
-import threading
-from collections import OrderedDict
-import abc
 import shutil
+import threading
+import time
+import typing
 
-import pytz
-from past.builtins import basestring
-from future.utils import with_metaclass
 import flotils
-from flotils.loadable import Loadable, DateTimeEncoder, DateTimeDecoder
-from flotils import StartStopable
+import pytz
 
 
-logger = flotils.get_logger()  # pylint: disable=invalid-name
+logger = flotils.get_logger()
 
 
 class TVNextException(Exception):
     """ Base exception for project """
+
     pass
 
 
 class TVNextFatalException(Exception):
     """ Exception that can not be recovered from """
+
     pass
 
 
 class TVNextNotFoundException(Exception):
     """ Show not found """
+
     pass
 
 
-class JSONDecoder(DateTimeDecoder):
+class JSONDecoder(flotils.loadable.DateTimeDecoder):
     """ Extend DateTimeDecoder with tzinfo field """
 
     @staticmethod
@@ -58,11 +53,12 @@ class JSONDecoder(DateTimeDecoder):
         raise TypeError("Not pytzinfo")
 
     @staticmethod
-    def decode(dct):
+    def decode(dct: typing.Any) -> typing.Any:
+        """ Decode object """
         try:
             if isinstance(dct, dict):
                 return JSONDecoder._as_tzinfo(dct)
-        except:
+        except Exception:
             pass
         res = super(JSONDecoder, JSONDecoder).decode(dct)
         if isinstance(res, datetime.datetime):
@@ -70,33 +66,32 @@ class JSONDecoder(DateTimeDecoder):
         return res
 
 
-class JSONEncoder(DateTimeEncoder):
+class JSONEncoder(flotils.loadable.DateTimeEncoder):
     """ Extend DateTimeEncoder with tzinfo field """
 
-    def default(self, obj):
+    def default(self, obj: typing.Any) -> typing.Any:
+        """ Encode object """
         if isinstance(obj, datetime.tzinfo):
             return obj.zone
         else:
             return super(JSONEncoder, self).default(obj)
 
 
-class TVNext(Loadable, StartStopable, abc.ABC):
-    """
-    Abstract checker for new tv episodes
-    """
-#    __metaclass__ = abc.ABCMeta
+class TVNext(flotils.Loadable, flotils.StartStopable, abc.ABC):
+    """ Abstract checker for new tv episodes """
 
-    def __init__(self, settings=None):
+    def __init__(
+            self,
+            settings: typing.Optional[typing.Dict[str, typing.Any]] = None
+    ) -> None:
         """
         Initialise instance
 
         :param settings: Settings
-        :type settings: None | dict
-        :rtype: None
         """
         if settings is None:
             settings = {}
-        super(TVNext, self).__init__(settings)
+        super().__init__(settings)
 
         self._shows = OrderedDict(settings.get('shows', {}))
         """ Show information
@@ -142,7 +137,7 @@ class TVNext(Loadable, StartStopable, abc.ABC):
         """ Timezone to be used if not provided for show
             :type : datetime.timezone """
 
-        if isinstance(self._timezone, basestring):
+        if isinstance(self._timezone, str):
             # If given as name -> convert to timezone with pytz
             self._timezone = pytz.timezone(self._timezone)
 
@@ -168,14 +163,12 @@ class TVNext(Loadable, StartStopable, abc.ABC):
         """ Lock to prevent concurrent access
             :type : threading.RLock """
 
-    def start(self, blocking=False):
+    def start(self, blocking: bool = False) -> None:
         """
         Start the interface
 
         :param blocking: Should the call block until stop() is called
             (default: False)
-        :type blocking: bool
-        :rtype: None
         """
         if self._cache_file and os.path.exists(self._cache_file):
             shows = self._load_json_file(
@@ -190,28 +183,25 @@ class TVNext(Loadable, StartStopable, abc.ABC):
             self.show_name_file_load()
         super(TVNext, self).start(blocking)
 
-    def stop(self):
-        """
-        Stop the interface
-
-        :rtype: None
-        """
+    def stop(self) -> None:
+        """ Stop the interface """
         self.debug("()")
         super(TVNext, self).stop()
         # self.show_save_all()
 
-    def show_name_file_load(self):
+    def show_name_file_load(self) -> None:
         """
         Load file containing show names
 
-        :rtype: None
         :raises IOError: File not found
         :raises IOError: Failed to load
         """
         self._show_file = self.join_path_prefix(self._show_file)
 
         if os.path.exists(self._show_file):
-            show_names = self._load_json_file(
+            show_names: typing.List[
+                typing.Union[str, typing.Tuple[str, str]]
+            ] = self._load_json_file(
                 self._show_file, decoder=JSONDecoder
             )
             """ :type : list[str | (str, str)] """
@@ -220,7 +210,7 @@ class TVNext(Loadable, StartStopable, abc.ABC):
                 timezone = self._timezone
                 if isinstance(name, list):
                     name, timezone = name
-                if isinstance(timezone, basestring):
+                if isinstance(timezone, str):
                     timezone = pytz.timezone(timezone)
                 self._shows.setdefault(name, {})
                 self._shows[name]['air_timezone'] = timezone
@@ -228,55 +218,51 @@ class TVNext(Loadable, StartStopable, abc.ABC):
             raise IOError("File '{}' not found".format(self._show_file))
         self.debug("Loaded show names from {}".format(self._show_file))
 
-    def show_add(self, show, timezone=None):
+    def show_add(self, show: str, timezone: typing.Optional = None) -> None:
         """
         Add new show with default params
 
         :param show: Name of show
-        :type show: unicode
         :param timezone: Timezone to add - None means no timezone
             (Default: None)
-        :rtype: None
         """
-        if isinstance(timezone, basestring):
+        if isinstance(timezone, str):
             timezone = pytz.timezone(timezone)
         with self._lock_update:
             self._shows.setdefault(show, {})
             if timezone:
                 self._shows[show]['air_timezone'] = timezone
 
-    def show_remove(self, show):
+    def show_remove(self, show: str) -> None:
         """
         Remove show
 
         :param show: Name of show
-        :type show: unicode
-        :rtype: None
         """
         with self._lock_update:
             if show in self._shows:
                 del self._shows[show]
 
     @property
-    def shows(self):
+    def shows(self) -> typing.Dict[str, typing.Dict[str, typing.Union[
+        str, bool, datetime.time, datetime.datetime, int,
+        typing.Dict[
+            str, typing.Dict[str, typing.Union[str, datetime.datetime]]
+        ]
+    ]]]:
         """
         Show information
 
         :return: Shows being watched watching
-        :rtype: dict[unicode, dict[unicode, bool | unicode | datetime.time | \
-        datetime.datetime | int | dict[unicode, dict[\
-        unicode, unicode | datetime.datetime]]]
         """
         return self._shows
 
-    def show_save_all(self, path=None):
+    def show_save_all(self, path: typing.Optional[str] = None) -> None:
         """
         Save shows cache
 
         :param path: Path to save to (default: None)
             if None -> use cache_file
-        :type path: None | unicode
-        :rtype: None
         """
         if not path:
             path = self._cache_file
@@ -291,36 +277,35 @@ class TVNext(Loadable, StartStopable, abc.ABC):
             )
             shutil.move(temp_path, path)
             self.info("Saved shows to {}".format(path))
-        except:
+        except Exception:
             self.exception("Failed to save shows to {}".format(path))
 
-    def show_episodes_flatten(self, key, show=None):
+    def show_episodes_flatten(
+            self, key: str, show: typing.Optional = None
+    ) -> typing.List[typing.Dict[str, typing.Union[str, datetime.datetime]]]:
         """
         Get a (flat) list of this shows episodes
 
         :param key: Show key
-        :type key: unicode
         :param show: Show information (default: None)
             if None -> use key to retrieve show information
         :type show: dict[unicode, bool | unicode | datetime.time | \
-        datetime.datetime | int | dict[unicode, dict[\
-        unicode, unicode | datetime.datetime]]
+            datetime.datetime | int | dict[unicode, dict[\
+            unicode, unicode | datetime.datetime]]
         :return: Episode list
-        :rtype: list[dict[unicode, unicode | datetime.datetime]]
         """
         if not show:
             show = self._shows[key]
         eps = show['episodes']
         return [eps[s_nr][e_nr] for s_nr in eps for e_nr in eps[s_nr]]
 
-    def show_update_should(self, key, force_check=False):
+    def show_update_should(self, key: str, force_check: bool = False) -> bool:
         """
         Decide if show needs updating
 
         :param key: Show key
-        :type key: unicode
+        :param force_check: Force checking
         :return: Should show be updated
-        :rtype: bool
         """
         show = self._shows[key]
         now = pytz.utc.localize(datetime.datetime.utcnow())
@@ -394,18 +379,16 @@ class TVNext(Loadable, StartStopable, abc.ABC):
         # Use generic access interval
         return diff.days >= self._access_interval
 
-    def show_update(self, key, force_check=False, auto_save=False):
+    def show_update(
+            self, key: str, force_check: bool = False, auto_save: bool = False
+    ) -> bool:
         """
         Update show (and adds it if not already present)
 
-        :param force_check: Force information load (default: False)
-        :type force_check: bool
         :param key: Show name
-        :type key: unicode
+        :param force_check: Force information load (default: False)
         :param auto_save: Save after update (default: False)
-        :type auto_save: bool
         :return: Changed
-        :rtype: bool
         """
         if not self.show_update_should(key, force_check):
             # Show information already up to date
@@ -451,28 +434,25 @@ class TVNext(Loadable, StartStopable, abc.ABC):
         return changed
 
     @abc.abstractmethod
-    def _show_update(self, key):
+    def _show_update(self, key: str) -> bool:
         """
         Update show (and adds it if not already present)
 
         Overwrite to implement
 
         :param key: Show name
-        :type key: unicode
         :return: Changed
-        :rtype: bool
         """
         raise NotImplementedError
 
-    def show_update_all(self, force_check=False, auto_save=False):
+    def show_update_all(
+            self, force_check: bool = False, auto_save: bool = False,
+    ) -> None:
         """
         Update information for all shows
 
         :param force_check: Force information load (default: False)
-        :type force_check: bool
         :param auto_save: Save after each update (default: False)
-        :type auto_save: bool
-        :rtype: None
         """
         shows = self._shows
         changed = False
@@ -482,23 +462,26 @@ class TVNext(Loadable, StartStopable, abc.ABC):
             self.show_save_all()
 
     def check(
-            self, key, force_check=False, delta_min=None, delta_max=None,
-            auto_save=False
-    ):
+            self,
+            key: str,
+            force_check: bool = False,
+            delta_min: typing.Optional[typing.Union[
+                int, datetime.date, datetime.timedelta
+            ]] = None,
+            delta_max: typing.Optional[typing.Union[
+                int, datetime.date, datetime.timedelta
+            ]] = None,
+            auto_save: bool = False,
+    ) -> typing.List[typing.Tuple[str, typing.Dict]]:
         """
         Check a single show for updates in a period
         (adds it if not already present and updates info)
 
         :param key: Show to check
-        :type key: unicode
         :param force_check:  Force information load (default: False)
-        :type force_check: bool
         :param delta_min: Time in the past (either date or delta from now)
-        :type delta_min: datetime.date | datetime.timedelta | int
         :param delta_max: Time in the future (either date or delta from now)
-        :type delta_max: datetime.date | datetime.timedelta | int
         :param auto_save: Save after each update (default: False)
-        :type auto_save: bool
         :return: Show, episode pair matching the query
         """
         if not self.is_running:
@@ -537,7 +520,7 @@ class TVNext(Loadable, StartStopable, abc.ABC):
                 # Add missing
                 self.show_add(key)
             # Update info
-            changed = self.show_update(key, force_check, auto_save)
+            self.show_update(key, force_check, auto_save)
 
             # self.info("Searching between {} and {}".format(day_min, day_max))
             show = self.shows[key]
@@ -560,9 +543,28 @@ class TVNext(Loadable, StartStopable, abc.ABC):
             return results
 
     def check_all(
-            self, keys=None, delta_min=None, delta_max=None,
-            force_check=False, auto_save=False
-    ):
+            self,
+            keys: typing.Optional[typing.List[str]] = None,
+            delta_min: typing.Optional[typing.Union[
+                int, datetime.date, datetime.timedelta
+            ]] = None,
+            delta_max: typing.Optional[typing.Union[
+                int, datetime.date, datetime.timedelta
+            ]] = None,
+            force_check: bool = False,
+            auto_save: bool = False,
+    ) -> typing.List[typing.Tuple[str, typing.Dict]]:
+        """
+        Check multiple shows for updates in a period
+        (adds it if not already present and updates info)
+
+        :param keys: Shows to check; None -> check all (default: None)
+        :param force_check:  Force information load (default: False)
+        :param delta_min: Time in the past (either date or delta from now)
+        :param delta_max: Time in the future (either date or delta from now)
+        :param auto_save: Save after each update (default: False)
+        :return: Show, episode pair matching the query
+        """
         if not self._is_running:
             self.warning("Not running")
         results = []

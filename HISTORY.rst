@@ -4,6 +4,12 @@ History
 =======
 
 
+0.6.9 (2020-04-12)
+------------------
+* Update tvdb-api
+* add tox, flake8
+
+
 0.6.8 (2020-02-29)
 ------------------
 * Update multiple candidate match logic

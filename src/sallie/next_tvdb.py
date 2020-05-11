@@ -1,26 +1,21 @@
 # -*- coding: UTF-8 -*-
 """ TVNext implementation for tvdb """
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
-
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.8"
-__date__ = "2020-02-29"
+__version__ = "0.2.9"
+__date__ = "2020-05-11"
 # Created: 2015-04-29 19:15
 
 import datetime
 import difflib
+import typing
 
-import flotils
 import dateutil
 import dateutil.parser
+import flotils
 import pytz
-from past.builtins import basestring
 import tvdb_api
 
 from .tv_next import TVNext, TVNextNotFoundException
@@ -30,23 +25,23 @@ logger = flotils.get_logger()
 
 
 class TVNextTVDB(TVNext):
-    """
-    Check tv shows with tvdb
-    """
+    """ Check tv shows with tvdb """
 
     class TVDBUI(tvdb_api.BaseUI):
         """ Class to select a show based on year """
+
         # pylint: disable=invalid-name
 
         current = None
 
-        def selectSeries(self, allSeries):
+        def selectSeries(self, allSeries):  # noqa: N802, N803
+            """ Select a series """
             tvnext = self.config['tvnext']
             """ :type : TVNextTVDB """
 
             key = self.current['key']
             year = self.current.get('year')
-            allSeries = [
+            allSeries = [  # noqa: N806
                 (
                     series,
                     difflib.SequenceMatcher(
@@ -60,23 +55,31 @@ class TVNextTVDB(TVNext):
                 "Options: {}".format(",".join([
                     "{} ({:.2f})".format(series.get('seriesName'), ratio)
                     for series, ratio in allSeries
-                ])
-            ))
+                ]))
+            )
             parts = key.split()
 
             if year:
                 year = parts[-1][1:-1]
-                for series, ratio in allSeries:
+                for series, _ratio in allSeries:
                     if series.get('firstAired') and \
                             series['firstAired'].split('-')[0] == year:
                         # Same year -> assume this one
                         return series
             return allSeries[0][0]
 
-    def __init__(self, settings=None):
+    def __init__(
+            self,
+            settings: typing.Optional[typing.Dict[str, typing.Any]] = None
+    ) -> None:
+        """
+        Initialise instance
+
+        :param settings: Settings
+        """
         if settings is None:
             settings = {}
-        super(TVNextTVDB, self).__init__(settings)
+        super().__init__(settings)
 
         cache = True
         if self._cache_path:
@@ -85,12 +88,14 @@ class TVNextTVDB(TVNext):
         self.debug("Using cache file {}".format(self._cache_file))
         self._tvdb_cache = cache
         self._tvdb = None
+        self._tvdb_api_key = settings['tvdb_api_key']
         self._init_tvdb()
 
-    def _init_tvdb(self):
+    def _init_tvdb(self) -> None:
+        """ Init tvdb instance """
         self.debug("Initializing tvdb instance..")
         self._tvdb = tvdb_api.Tvdb(
-            cache=self._tvdb_cache, custom_ui=self.TVDBUI
+            cache=self._tvdb_cache, custom_ui=self.TVDBUI, apikey=self._tvdb_api_key
         )
         if self._tvdb_cache:
             # Fix tvdb_api bug
@@ -100,7 +105,13 @@ class TVNextTVDB(TVNext):
         self._tvdb.config['tvnext'] = self
         self.info("TVDB instance initialized")
 
-    def _key_error_retry(self, key):
+    def _key_error_retry(self, key: str) -> typing.Any:
+        """
+        Retry Upon key error
+
+        :param key: Key to retry
+        :return: Found data
+        """
         if self._tvdb is None:
             self._init_tvdb()
         try:
@@ -110,17 +121,14 @@ class TVNextTVDB(TVNext):
             self._init_tvdb()
             return self._tvdb[key]
 
-    def _show_update(self, key):
+    def _show_update(self, key: str) -> bool:
         """
         Update show (and adds it if not already present)
 
         :param key: Show name
-        :type key: str
         :return: Changed (Might not really have changed - but successfull read)
-        :rtype: bool
         """
         self.debug("Updating {}..".format(key))
-        changed = False
         show = self._shows.setdefault(key, {})
         now = pytz.utc.localize(datetime.datetime.utcnow())
         year = None
@@ -171,7 +179,7 @@ class TVNextTVDB(TVNext):
         show['air_time'] = tvdb_show['airsTime']
         show.setdefault('air_timezone', self._timezone)
 
-        if isinstance(show['air_timezone'], basestring):
+        if isinstance(show['air_timezone'], str):
             show['air_timezone'] = pytz.timezone(show['air_timezone'])
         if show['air_time']:
             show['air_time'] = dateutil.parser.parse(show['air_time']).time()
@@ -199,7 +207,7 @@ class TVNextTVDB(TVNext):
                     # Use datetime instead of date for tz info localization
                     try:
                         aired = dateutil.parser.parse(aired)
-                    except:
+                    except Exception:
                         if aired == "0000-00-00":
                             self.error("Invalid aired date: {}-{}x{}".format(
                                 key, season_nr, episode_nr

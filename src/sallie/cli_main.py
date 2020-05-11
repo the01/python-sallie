@@ -1,26 +1,22 @@
 # -*- coding: UTF-8 -*-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+""" CLI interface for sallie """
 
 __author__ = "d01"
 __email__ = "jungflor@gmail.com"
-__copyright__ = "Copyright (C) 2016-19, Florian JUNG"
+__copyright__ = "Copyright (C) 2016-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.1.3"
-__date__ = "2019-04-15"
+__version__ = "0.1.4"
+__date__ = "2020-05-11"
 # Created: 2016-05-12 18:04
 
 import argparse
 import datetime
 import logging.config
 
-import pytz
 import flotils
-from flotils.logable import default_logging_config
+import pytz
 
-from . import TVNextTVDB
+from .next_tvdb import TVNextTVDB
 
 
 logger = flotils.get_logger()
@@ -40,7 +36,7 @@ def shows_format(shows_list):
     res = []
     now = pytz.utc.localize(datetime.datetime.utcnow()).date()
 
-    for show, info in shows_list:
+    for _show, info in shows_list:
         if not info:
             continue
         omit_date &= bool(info.get('aired'))
@@ -53,31 +49,32 @@ def shows_format(shows_list):
     for show, info in shows_list:
         if not info:
             continue
-        txt = u""
+        txt = ""
         name = info.get('name', "")
         nr = info['id']
         if info.get('aired'):
             if omit_date:
-                txt += u"{}: ".format(info['aired'].strftime("%H:%M"))
+                txt += "{}: ".format(info['aired'].strftime("%H:%M"))
             else:
                 dfmt = info['aired'].strftime("%Y-%m-%d %H:%M")
                 d = (now - info['aired'].date()).days
-                txt += u"{} ({}): ".format(
+                txt += "{} ({}): ".format(
                     dfmt,
-                    u"{}d".format(abs(d))
+                    "{}d".format(abs(d))
                     if d < 0 else
                     "today" if d == 0 else u"{}d ago".format(d)
                 )
-        txt += u"{} ({}".format(show.upper(), nr)
+        txt += "{} ({}".format(show.upper(), nr)
 
         if name:
-            txt += u" - {}".format(name)
-        txt += u")"
+            txt += " - {}".format(name)
+        txt += ")"
         res.append(txt)
     return res
 
 
 def to_string(evs):
+    """ Convert to string """
     if isinstance(evs, list):
         msg = ""
         last = None
@@ -86,11 +83,11 @@ def to_string(evs):
             if d and last != d.date():
                 msg += u"{}{}{}".format(
                     "",
-                    "\n" + d.strftime("%Y-%m-%d (%a)") + "\n" + "="*10,
+                    "\n" + d.strftime("%Y-%m-%d (%a)") + "\n" + "=" * 10,
                     "\n"
                 )
                 last = d.date()
-            msg += u"  {}{}{}".format(
+            msg += "  {}{}{}".format(
                 "",
                 to_string(ev),
                 "\n"
@@ -106,15 +103,15 @@ def to_string(evs):
         date = date.strftime("%Y-%m-%d") + " "
     else:
         date = ""
-    #date = ""
+
     nr = info['episode']
-    feedTxt = u"{}{} ({}".format(date, show, nr)
+    feed_txt = "{}{} ({}".format(date, show, nr)
 
     if name:
-        feedTxt += u" - {}".format(name)
+        feed_txt += " - {}".format(name)
 
-    feedTxt += ")"
-    return feedTxt
+    feed_txt += ")"
+    return feed_txt
 
 
 def shows_check(s, autosave, forcecheck, min_delta, max_delta):
@@ -149,10 +146,12 @@ def shows_check(s, autosave, forcecheck, min_delta, max_delta):
     # logging.info(u"\n{}".format(toString(res)))
 
 
-def shows_list(
+def shows_list(  # noqa: C901
         s, select, sort_by="", reverse=False, list_all=False,
-        min_delta=None, max_delta=None):
+        min_delta=None, max_delta=None
+) -> None:
     """
+    List shows
 
     :param s: Sallie instance
     :type s: sallie.TVNext
@@ -168,7 +167,6 @@ def shows_list(
     :type min_delta: None | int
     :param max_delta: Delta in days into the future
     :type max_delta: None | int
-    :rtype: None
     """
     now = pytz.UTC.localize(datetime.datetime.utcnow())
 
@@ -209,7 +207,7 @@ def shows_list(
     shows = s.shows
     sort_by = sort_by.split(";")
     if list_all:
-        l = []
+        temp_l = []
         if "state":
             res = {
                 "active": [],
@@ -222,19 +220,19 @@ def shows_list(
                 if not state:
                     continue
                 res[state].append(key)
-            l.extend(res['active'])
-            l.extend(res['hiatus'])
-            l.extend(res['inactive'])
+            temp_l.extend(res['active'])
+            temp_l.extend(res['hiatus'])
+            temp_l.extend(res['inactive'])
         if reverse:
-            l = reversed(l)
-        for key in l:
+            temp_l = reversed(temp_l)
+        for key in temp_l:
             state = get_state(shows[key])
-            logger.info(u"{} ({})".format(key, state.upper()))
+            logger.info("{} ({})".format(key, state.upper()))
         return
 
     if select != "all":
         if select not in shows:
-            logger.error(u"Show {} not found".format(select))
+            logger.error("Show {} not found".format(select))
             return
         keys = [select]
     else:
@@ -283,7 +281,6 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
 
     def in_range(min_delta, ep, max_delta):
         date = get_aired(ep)
-        res = True
         # None -> dont care
         if min_delta is not None and now > date:
             return (now - date) < min_delta
@@ -326,12 +323,11 @@ def shows_next(s, select, sort_by="", reverse=False, max_delta=None):
     return formatted
 
 
-def setup_parser():
+def setup_parser() -> argparse.ArgumentParser:
     """
     Create and init argument parser
 
     :return: Argument parser
-    :rtype: argparse.ArgumentParser
     """
     parser = argparse.ArgumentParser(prog="sallie")
     parser.add_argument(
@@ -412,8 +408,9 @@ def setup_parser():
     return parser
 
 
-def main():
-    logging.config.dictConfig(default_logging_config)
+def main() -> None:  # noqa: C901
+    """ Run cli program """
+    logging.config.dictConfig(flotils.logable.default_logging_config)
     logging.getLogger().setLevel(logging.INFO)
     logging.getLogger('tvdb_api').setLevel(logging.INFO)
 
@@ -430,6 +427,7 @@ def main():
     check = args.check
     saved = False
     tv.start(blocking=False)
+
     try:
         if args.update:
             if args.update == "all":
