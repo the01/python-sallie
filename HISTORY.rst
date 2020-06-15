@@ -4,6 +4,12 @@ History
 =======
 
 
+0.6.10 (2020-06-15)
+------------------
+* fix cli force param
+* handle reauthorize
+
+
 0.6.9 (2020-04-12)
 ------------------
 * Update tvdb-api

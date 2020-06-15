@@ -4,8 +4,8 @@
 __author__ = "d01"
 __copyright__ = "Copyright (C) 2016-20, Florian JUNG"
 __license__ = "MIT"
-__version__ = "0.2.9"
-__date__ = "2020-05-11"
+__version__ = "0.2.10"
+__date__ = "2020-06-15"
 # Created: 2015-04-29 19:15
 
 import datetime
@@ -102,10 +102,11 @@ class TVNextTVDB(TVNext):
             self._tvdb.config['cache_enabled'] = True
         else:
             self._tvdb.config['cache_enabled'] = False
+        self._tvdb.authorize()
         self._tvdb.config['tvnext'] = self
         self.info("TVDB instance initialized")
 
-    def _key_error_retry(self, key: str) -> typing.Any:
+    def _key_error_retry(self, key: str, reauthorized: bool = False) -> typing.Any:
         """
         Retry Upon key error
 
@@ -116,6 +117,11 @@ class TVNextTVDB(TVNext):
             self._init_tvdb()
         try:
             return self._tvdb[key]
+        except tvdb_api.tvdb_error as e:
+            if "not authorized" in str(e).lower() and not reauthorized:
+                self._tvdb.authorize()
+                return self._key_error_retry(key, reauthorized=True)
+            raise
         except KeyError as e:
             self.warning("{}: Key error '{}'".format(key, e))
             self._init_tvdb()

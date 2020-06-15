@@ -428,6 +428,9 @@ def main() -> None:  # noqa: C901
     saved = False
     tv.start(blocking=False)
 
+    if args.force and tv._tvdb_cache:
+        tv._tvdb.session._cache_expire_after = datetime.timedelta(seconds=2)
+
     try:
         if args.update:
             if args.update == "all":

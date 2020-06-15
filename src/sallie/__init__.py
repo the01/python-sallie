@@ -5,7 +5,7 @@ __author__ = "the01"
 __email__ = "jungflor@gmail.com"
 __copyright__ = "Copyright (C) 2014-20, Florian JUNG"
 __license__ = "MIT"
-__date__ = "2020-05-11"
+__date__ = "2020-06-15"
 # Created: 2015-02-26 03:39
 
 import logging
